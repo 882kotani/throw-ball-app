@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Throw Controller</title>
+  <title>Throw Controller Dynamic</title>
   <style>
     body {
       margin: 0;
@@ -12,20 +12,19 @@
       flex-direction: column;
       justify-content: center;
       align-items: center;
-      background-color: #0d1117;
-      color: #ffffff;
+      background: #090d16;
+      color: #fff;
       font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-      touch-action: manipulation;
     }
     .btn {
       padding: 24px 48px;
       font-size: 1.2rem;
       font-weight: bold;
       color: #fff;
-      background: #238636;
+      background: linear-gradient(135deg, #FF416C, #FF4B2B);
       border: none;
       border-radius: 50px;
-      box-shadow: 0 4px 12px rgba(35, 134, 54, 0.4);
+      box-shadow: 0 4px 20px rgba(255, 75, 43, 0.5);
     }
     #status {
       margin-top: 24px;
@@ -45,20 +44,15 @@
     const startBtn = document.getElementById('startBtn');
     const status = document.getElementById('status');
     let isCoolingDown = false;
-    const THRESHOLD = 22; // 投げる動作と判定する合成加速度の閾値 (m/s²)
+    const THRESHOLD = 20;
 
     startBtn.addEventListener('click', async () => {
       if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
         try {
           const permission = await DeviceMotionEvent.requestPermission();
-          if (permission === 'granted') {
-            initSensor();
-          } else {
-            status.textContent = 'センサーへのアクセスが拒否されました。';
-          }
-        } catch (err) {
-          status.textContent = 'エラー: ' + err.message;
-        }
+          if (permission === 'granted') initSensor();
+          else status.textContent = 'アクセスが拒否されました';
+        } catch (err) { status.textContent = 'エラー: ' + err.message; }
       } else {
         initSensor();
       }
@@ -66,41 +60,44 @@
 
     function initSensor() {
       startBtn.style.display = 'none';
-      status.textContent = '準備完了！iPhoneを画面向こうへ振ってボールを投げてください。';
+      status.textContent = '左右に角度をつけて投げ分けてみてください！';
 
       window.addEventListener('devicemotion', (event) => {
         if (isCoolingDown) return;
-
         const acc = event.acceleration;
         if (!acc || acc.x === null) return;
 
-        // 3軸の合成加速度を算出
         const totalAcc = Math.sqrt(acc.x ** 2 + acc.y ** 2 + acc.z ** 2);
 
         if (totalAcc > THRESHOLD) {
-          emitThrow(totalAcc);
+          // X軸の加速度で左右判定 (画面向きにより調整)
+          const angleX = acc.x; 
+          let ballType = 'normal';
+          
+          if (totalAcc > 38) ballType = 'fireball';
+          else if (Math.abs(angleX) > 12) ballType = 'curve';
+
+          emitThrow(totalAcc, angleX, ballType);
         }
       });
     }
 
-    async function emitThrow(power) {
+    async function emitThrow(power, angleX, ballType) {
       isCoolingDown = true;
-      status.textContent = `ボールを発射！ (パワー: ${power.toFixed(1)})`;
+      status.textContent = `【${ballType.toUpperCase()}】発射！ (Power: ${power.toFixed(1)})`;
 
       try {
         await fetch('/api/throw', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ velocity: power })
+          body: JSON.stringify({ velocity: power, angle: angleX, type: ballType })
         });
-      } catch (e) {
-        console.error(e);
-      }
+      } catch (e) { console.error(e); }
 
       setTimeout(() => {
         isCoolingDown = false;
-        status.textContent = '準備完了！iPhoneを振ってボールを投げてください。';
-      }, 800);
+        status.textContent = '準備完了！iPhoneを振り抜いてください。';
+      }, 700);
     }
   </script>
 </body>

@@ -6,7 +6,6 @@ const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// いただいたPusherの情報を設定しました
 const pusher = new Pusher({
 	appId: '2190403',
 	key: '00bff6f8110fdcd6881d',
@@ -16,11 +15,12 @@ const pusher = new Pusher({
 });
 
 app.post('/api/throw', (req, res) => {
-	const { velocity } = req.body;
+	const { velocity, angle, type } = req.body;
 
-	// game-channelにthrow-ballイベントを送信
 	pusher.trigger('game-channel', 'throw-ball', {
 		velocity: velocity || 25,
+		angle: angle || 0,
+		type: type || 'normal',
 		timestamp: Date.now(),
 	});
 

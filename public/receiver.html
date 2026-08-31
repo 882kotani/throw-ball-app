@@ -3,22 +3,19 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Ball Stage</title>
+  <title>Ball Stage Dynamic Effects</title>
   <script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
   <style>
     body {
       margin: 0;
       overflow: hidden;
-      background: #0f0c29;
-      background: linear-gradient(to bottom, #24243e, #302b63, #0f0c29);
+      background: #0a0a16;
       display: flex;
       justify-content: center;
       align-items: center;
       height: 100vh;
     }
-    canvas {
-      display: block;
-    }
+    canvas { display: block; }
   </style>
 </head>
 <body>
@@ -36,47 +33,74 @@
     window.addEventListener('resize', resize);
     resize();
 
-    // いただいたPusherのKeyとClusterを設定しました
-    const pusher = new Pusher('00bff6f8110fdcd6881d', {
-      cluster: 'ap3'
-    });
-
+    const pusher = new Pusher('00bff6f8110fdcd6881d', { cluster: 'ap3' });
     const channel = pusher.subscribe('game-channel');
+
     channel.bind('throw-ball', (data) => {
-      // 受信した速度データを元にボールを描画
-      createBall(data.velocity);
+      createBall(data.velocity, data.angle, data.type);
     });
 
     const balls = [];
+    const particles = [];
 
-    function createBall(power) {
-      const speedFactor = Math.min(Math.max(power / 10, 1.8), 4.5);
+    function createBall(power, angle, type) {
+      const speedFactor = Math.min(Math.max(power / 10, 2.0), 5.5);
       
+      // X軸加速度から初期位置(左右)と横方向ベクトルの算出
+      const startXOffset = Math.min(Math.max(angle * 25, -canvas.width * 0.4), canvas.width * 0.4);
+      const startX = (canvas.width / 2) - startXOffset; // 逆方向に投げる感覚に調整
+      const targetX = canvas.width / 2;
+
       balls.push({
-        x: canvas.width / 2 + (Math.random() - 0.5) * 60,
-        y: canvas.height - 50,
+        x: startX,
+        y: canvas.height - 30,
         scale: 1.0,
-        vx: (Math.random() - 0.5) * 3,
-        vy: -14 * speedFactor,
-        vScale: 0.018 * (speedFactor / 2),
-        radius: 45,
-        gravity: 0.38
+        vx: (targetX - startX) * 0.035, // 画面中央に向かうベクトル
+        vy: -15 * speedFactor,
+        curveX: -angle * 0.15, // カーブ成分
+        vScale: 0.016 * (speedFactor / 2),
+        radius: type === 'fireball' ? 55 : 40,
+        gravity: 0.35,
+        type: type,
+        color: type === 'fireball' ? '#ff3e3e' : (type === 'curve' ? '#00f2fe' : '#4facfe')
       });
     }
 
+    function createExplosion(x, y, color) {
+      for (let i = 0; i < 35; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = Math.random() * 8 + 2;
+        particles.push({
+          x, y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          life: 1.0,
+          decay: Math.random() * 0.03 + 0.02,
+          color,
+          size: Math.random() * 6 + 2
+        });
+      }
+    }
+
     function render() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = 'rgba(10, 10, 22, 0.3)'; // 残像効果
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // ターゲット枠の描画
+      // ターゲット枠描画
+      ctx.save();
       ctx.beginPath();
-      ctx.arc(canvas.width / 2, canvas.height / 3, 90, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-      ctx.lineWidth = 4;
+      ctx.arc(canvas.width / 2, canvas.height / 3, 80, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+      ctx.lineWidth = 3;
+      ctx.setLineDash([8, 8]);
       ctx.stroke();
+      ctx.restore();
 
+      // 1. ボールのアニメーション
       for (let i = balls.length - 1; i >= 0; i--) {
         const b = balls[i];
 
+        b.vx += b.curveX * 0.05; // 飛行中のカーブ処理
         b.x += b.vx;
         b.y += b.vy;
         b.vy += b.gravity;
@@ -84,29 +108,64 @@
 
         const currentRadius = Math.max(b.radius * b.scale, 2);
 
-        if (b.scale > 0.05) {
+        // トレイル（火花・光の粒子）生成
+        if (Math.random() < 0.8) {
+          particles.push({
+            x: b.x + (Math.random() - 0.5) * currentRadius,
+            y: b.y + (Math.random() - 0.5) * currentRadius,
+            vx: (Math.random() - 0.5) * 2,
+            vy: (Math.random() - 0.5) * 2,
+            life: 0.8,
+            decay: 0.05,
+            color: b.color,
+            size: currentRadius * 0.3
+          });
+        }
+
+        if (b.scale > 0.08) {
           ctx.save();
           ctx.beginPath();
           ctx.arc(b.x, b.y, currentRadius, 0, Math.PI * 2);
           
-          // ボールのグラデーションとシャドウ
           const gradient = ctx.createRadialGradient(
             b.x - currentRadius * 0.3, b.y - currentRadius * 0.3, currentRadius * 0.1,
             b.x, b.y, currentRadius
           );
-          gradient.addColorStop(0, '#ff7675');
-          gradient.addColorStop(1, '#d63031');
+          gradient.addColorStop(0, '#ffffff');
+          gradient.addColorStop(0.5, b.color);
+          gradient.addColorStop(1, '#000000');
 
           ctx.fillStyle = gradient;
-          ctx.shadowColor = 'rgba(214, 48, 49, 0.6)';
-          ctx.shadowBlur = 20 * b.scale;
+          ctx.shadowColor = b.color;
+          ctx.shadowBlur = 25 * b.scale;
           ctx.fill();
           ctx.restore();
-        }
-
-        // 画面外または遠くに飛んだボールの破棄
-        if (b.y > canvas.height + 100 || b.scale <= 0.05) {
+        } else {
+          // 目標地点到達（着弾爆発）
+          createExplosion(b.x, b.y, b.color);
           balls.splice(i, 1);
+        }
+      }
+
+      // 2. パーティクル（粒子・エフェクト）アニメーション
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life -= p.decay;
+
+        if (p.life > 0) {
+          ctx.save();
+          ctx.globalAlpha = p.life;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+          ctx.fillStyle = p.color;
+          ctx.shadowColor = p.color;
+          ctx.shadowBlur = 10;
+          ctx.fill();
+          ctx.restore();
+        } else {
+          particles.splice(i, 1);
         }
       }
 
