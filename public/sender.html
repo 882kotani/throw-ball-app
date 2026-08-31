@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Throw Controller</title>
+  <style>
+    body {
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background-color: #0d1117;
+      color: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      touch-action: manipulation;
+    }
+    .btn {
+      padding: 24px 48px;
+      font-size: 1.2rem;
+      font-weight: bold;
+      color: #fff;
+      background: #238636;
+      border: none;
+      border-radius: 50px;
+      box-shadow: 0 4px 12px rgba(35, 134, 54, 0.4);
+    }
+    #status {
+      margin-top: 24px;
+      font-size: 1rem;
+      color: #8b949e;
+      text-align: center;
+      padding: 0 20px;
+    }
+  </style>
+</head>
+<body>
+
+  <button id="startBtn" class="btn">センサーを起動する</button>
+  <div id="status">ボタンを押して振り動作を有効化してください</div>
+
+  <script>
+    const startBtn = document.getElementById('startBtn');
+    const status = document.getElementById('status');
+    let isCoolingDown = false;
+    const THRESHOLD = 22; // 投げる動作と判定する合成加速度の閾値 (m/s²)
+
+    startBtn.addEventListener('click', async () => {
+      if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+        try {
+          const permission = await DeviceMotionEvent.requestPermission();
+          if (permission === 'granted') {
+            initSensor();
+          } else {
+            status.textContent = 'センサーへのアクセスが拒否されました。';
+          }
+        } catch (err) {
+          status.textContent = 'エラー: ' + err.message;
+        }
+      } else {
+        initSensor();
+      }
+    });
+
+    function initSensor() {
+      startBtn.style.display = 'none';
+      status.textContent = '準備完了！iPhoneを画面向こうへ振ってボールを投げてください。';
+
+      window.addEventListener('devicemotion', (event) => {
+        if (isCoolingDown) return;
+
+        const acc = event.acceleration;
+        if (!acc || acc.x === null) return;
+
+        // 3軸の合成加速度を算出
+        const totalAcc = Math.sqrt(acc.x ** 2 + acc.y ** 2 + acc.z ** 2);
+
+        if (totalAcc > THRESHOLD) {
+          emitThrow(totalAcc);
+        }
+      });
+    }
+
+    async function emitThrow(power) {
+      isCoolingDown = true;
+      status.textContent = `ボールを発射！ (パワー: ${power.toFixed(1)})`;
+
+      try {
+        await fetch('/api/throw', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ velocity: power })
+        });
+      } catch (e) {
+        console.error(e);
+      }
+
+      setTimeout(() => {
+        isCoolingDown = false;
+        status.textContent = '準備完了！iPhoneを振ってボールを投げてください。';
+      }, 800);
+    }
+  </script>
+</body>
+</html>

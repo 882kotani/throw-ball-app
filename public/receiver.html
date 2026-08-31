@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ball Stage</title>
+  <script src="https://js.pusher.com/8.2.0/pusher.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #0f0c29;
+      background: linear-gradient(to bottom, #24243e, #302b63, #0f0c29);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+
+  <canvas id="stage"></canvas>
+
+  <script>
+    const canvas = document.getElementById('stage');
+    const ctx = canvas.getContext('2d');
+
+    function resize() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // いただいたPusherのKeyとClusterを設定しました
+    const pusher = new Pusher('00bff6f8110fdcd6881d', {
+      cluster: 'ap3'
+    });
+
+    const channel = pusher.subscribe('game-channel');
+    channel.bind('throw-ball', (data) => {
+      // 受信した速度データを元にボールを描画
+      createBall(data.velocity);
+    });
+
+    const balls = [];
+
+    function createBall(power) {
+      const speedFactor = Math.min(Math.max(power / 10, 1.8), 4.5);
+      
+      balls.push({
+        x: canvas.width / 2 + (Math.random() - 0.5) * 60,
+        y: canvas.height - 50,
+        scale: 1.0,
+        vx: (Math.random() - 0.5) * 3,
+        vy: -14 * speedFactor,
+        vScale: 0.018 * (speedFactor / 2),
+        radius: 45,
+        gravity: 0.38
+      });
+    }
+
+    function render() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // ターゲット枠の描画
+      ctx.beginPath();
+      ctx.arc(canvas.width / 2, canvas.height / 3, 90, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+      ctx.lineWidth = 4;
+      ctx.stroke();
+
+      for (let i = balls.length - 1; i >= 0; i--) {
+        const b = balls[i];
+
+        b.x += b.vx;
+        b.y += b.vy;
+        b.vy += b.gravity;
+        b.scale -= b.vScale;
+
+        const currentRadius = Math.max(b.radius * b.scale, 2);
+
+        if (b.scale > 0.05) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(b.x, b.y, currentRadius, 0, Math.PI * 2);
+          
+          // ボールのグラデーションとシャドウ
+          const gradient = ctx.createRadialGradient(
+            b.x - currentRadius * 0.3, b.y - currentRadius * 0.3, currentRadius * 0.1,
+            b.x, b.y, currentRadius
+          );
+          gradient.addColorStop(0, '#ff7675');
+          gradient.addColorStop(1, '#d63031');
+
+          ctx.fillStyle = gradient;
+          ctx.shadowColor = 'rgba(214, 48, 49, 0.6)';
+          ctx.shadowBlur = 20 * b.scale;
+          ctx.fill();
+          ctx.restore();
+        }
+
+        // 画面外または遠くに飛んだボールの破棄
+        if (b.y > canvas.height + 100 || b.scale <= 0.05) {
+          balls.splice(i, 1);
+        }
+      }
+
+      requestAnimationFrame(render);
+    }
+
+    render();
+  </script>
+</body>
+</html>
